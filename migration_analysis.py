@@ -197,6 +197,9 @@ def plot_gap_decomposition(ax, country, df):
     # Layer 3: Actual Stock (Blue Solid)
     ax.plot(years, data['Stock'], color='#003366', linewidth=2.5, label='Actual Resident Stock')
     
+    # Layer 4: Inflow (Teal Dotted)
+    ax.plot(years, data['Inflow'], color='teal', linestyle=':', linewidth=1.5, label='Inflow (First Permits)')
+    
     # Area 1: Naturalized (Integration) - Gold Fill
     ax.fill_between(years, data['Theoretical_Max'], data['Theoretical_Adj'],
                      color='gold', alpha=0.2, label='Naturalized (Integration)')
@@ -205,11 +208,6 @@ def plot_gap_decomposition(ax, country, df):
     ax.fill_between(years, data['Theoretical_Adj'], data['Stock'],
                      where=(data['Theoretical_Adj'] > data['Stock']),
                      color='tab:red', alpha=0.3, label='Emigration (Loss)')
-    
-    # Area 3: Net Gain/Refugee (Green Fill) - (Where Stock > Adj)
-    ax.fill_between(years, data['Stock'], data['Theoretical_Adj'],
-                     where=(data['Stock'] > data['Theoretical_Adj']),
-                     color='tab:green', alpha=0.3, label='Net Gain/Refugee Effect')
     
     # Annotations (Geopolitical Events)
     for year in [2014, 2022]:
