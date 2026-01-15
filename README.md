@@ -3,9 +3,7 @@
 <p align="center">
     <img src="https://img.shields.io/badge/Python-3.8+-blue.svg" alt="Python 3.8+">
     <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
-    <img src="https://img.shields.io/badge/Status-Active-brightgreen.svg" alt="Status: Active">
-    <img src="https://img.shields.io/badge/Pandas-2.x-blue.svg" alt="Pandas">
-    <img src="https://img.shields.io/badge/Matplotlib-3.x-orange.svg" alt="Matplotlib">
+    <img src="https://img.shields.io/badge/-For%20Fun-purple" alt="For Fun">
 </p>
 
 Этот проект представляет собой инструмент для демографического анализа миграционных процессов между Россией и странами Европейского Союза. Вместо простого подсчета прибывших, он фокусируется на **Коэффициенте Удержания (Retention Rate)** — ключевом показателе, который демонстрирует, какой процент иммигрантов остается в стране назначения на долгосрочной основе.
