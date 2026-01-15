@@ -237,6 +237,10 @@ def plot_gap_decomposition(ax_main, ax_bottom, country, df):
     # Layer 4: Inflow (Teal)
     ax_bottom.plot(years, data['Inflow'], color='teal', linestyle='-', linewidth=2, label='Inflow (First Permits)')
     
+    # Explicitly scale Y-axis to fit data (start at 0)
+    if not data['Inflow'].dropna().empty:
+        ax_bottom.set_ylim(bottom=0, top=data['Inflow'].max() * 1.1)
+    
     ax_bottom.set_ylabel('Inflow', fontsize=12)
     ax_bottom.yaxis.set_label_position("right")
     ax_bottom.yaxis.tick_right()
