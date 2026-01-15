@@ -173,57 +173,76 @@ def calculate_retention_ranking(df):
 # ==========================================
 # STEP 3: VISUALIZATION
 # ==========================================
-def plot_gap_decomposition(ax, country, df):
+def plot_gap_decomposition(ax_main, ax_bottom, country, df):
     """
     Renders the Gap Decomposition chart for a specific country.
     """
     data = df[df['Country'] == country].sort_values('Year')
     
     if data.empty or data['Stock'].isna().all():
-        ax.text(0.5, 0.5, f"Insufficient data for {country}", 
-                ha='center', va='center', transform=ax.transAxes)
+        ax_main.text(0.5, 0.5, f"Insufficient data for {country}", 
+                ha='center', va='center', transform=ax_main.transAxes)
+        ax_bottom.clear()
+        ax_bottom.axis('off')
         return
 
-    ax.clear()
+    ax_main.clear()
+    ax_bottom.clear()
+    ax_bottom.axis('on')
     
     years = data['Year']
     
+    # --- MAIN PLOT (Stock & Gap) ---
     # Layer 1: Theoretical Max (Grey Line)
-    ax.plot(years, data['Theoretical_Max'], color='grey', linewidth=1.5, label='Theoretical Max (Zero Exit)')
+    ax_main.plot(years, data['Theoretical_Max'], color='grey', linewidth=1.5, label='Theoretical Max (Zero Exit)')
     
     # Layer 2: Theoretical Adj (Gold Dashed)
-    ax.plot(years, data['Theoretical_Adj'], color='gold', linestyle='--', linewidth=2, label='Theoretical (Citizenship Adj.)')
+    ax_main.plot(years, data['Theoretical_Adj'], color='gold', linestyle='--', linewidth=2, label='Theoretical (Citizenship Adj.)')
     
     # Layer 3: Actual Stock (Blue Solid)
-    ax.plot(years, data['Stock'], color='#003366', linewidth=2.5, label='Actual Resident Stock')
-    
-    # Layer 4: Inflow (Teal Dotted)
-    ax.plot(years, data['Inflow'], color='teal', linestyle=':', linewidth=1.5, label='Inflow (First Permits)')
+    ax_main.plot(years, data['Stock'], color='#003366', linewidth=2.5, label='Actual Resident Stock')
     
     # Area 1: Naturalized (Integration) - Gold Fill
-    ax.fill_between(years, data['Theoretical_Max'], data['Theoretical_Adj'],
+    ax_main.fill_between(years, data['Theoretical_Max'], data['Theoretical_Adj'],
                      color='gold', alpha=0.2, label='Naturalized (Integration)')
     
     # Area 2: Emigration (Loss) - Red Fill (Where Adj > Stock)
-    ax.fill_between(years, data['Theoretical_Adj'], data['Stock'],
+    ax_main.fill_between(years, data['Theoretical_Adj'], data['Stock'],
                      where=(data['Theoretical_Adj'] > data['Stock']),
                      color='tab:red', alpha=0.3, label='Emigration (Loss)')
     
     # Annotations (Geopolitical Events)
     for year in [2014, 2022]:
         if year in years.values:
-            ax.axvline(x=year, color='black', linestyle=':', alpha=0.6)
+            # Main Plot Annotation
+            ax_main.axvline(x=year, color='black', linestyle=':', alpha=0.6)
             # Use current ylim for text placement
-            y_max = ax.get_ylim()[1]
-            ax.text(year, y_max*0.95, f' {year}', rotation=90, va='top')
+            y_max = ax_main.get_ylim()[1]
+            ax_main.text(year, y_max*0.95, f' {year}', rotation=90, va='top')
             
-    ax.set_title(f'Migration Gap Decomposition: {country}', fontsize=16, fontweight='bold')
-    ax.set_ylabel('Population Stock', fontsize=12)
-    ax.yaxis.set_label_position("right")
-    ax.yaxis.tick_right()
-    ax.set_xlabel('Year', fontsize=12)
-    ax.legend(loc='upper left', frameon=True)
-    ax.grid(True, linestyle=':', alpha=0.6)
+            # Bottom Plot Annotation
+            ax_bottom.axvline(x=year, color='black', linestyle=':', alpha=0.6)
+            
+    ax_main.set_title(f'Migration Gap Decomposition: {country}', fontsize=16, fontweight='bold')
+    ax_main.set_ylabel('Population Stock', fontsize=12)
+    ax_main.yaxis.set_label_position("right")
+    ax_main.yaxis.tick_right()
+    ax_main.legend(loc='upper left', frameon=True)
+    ax_main.grid(True, linestyle=':', alpha=0.6)
+    
+    # Hide X labels on main plot (shared axis)
+    plt.setp(ax_main.get_xticklabels(), visible=False)
+
+    # --- BOTTOM PLOT (Inflow) ---
+    # Layer 4: Inflow (Teal)
+    ax_bottom.plot(years, data['Inflow'], color='teal', linestyle='-', linewidth=2, label='Inflow (First Permits)')
+    
+    ax_bottom.set_ylabel('Inflow', fontsize=12)
+    ax_bottom.yaxis.set_label_position("right")
+    ax_bottom.yaxis.tick_right()
+    ax_bottom.set_xlabel('Year', fontsize=12)
+    ax_bottom.legend(loc='upper left', frameon=True)
+    ax_bottom.grid(True, linestyle=':', alpha=0.6)
 
 def main():
     try:
@@ -251,8 +270,16 @@ def main():
         print("\nStarting Dashboard...")
         print(f"Loaded {len(top_countries)} countries. Check the popup window.")
         
-        # Create Figure and Axes
-        fig, ax = plt.subplots()
+        # Create Figure and Axes with GridSpec
+        fig = plt.figure()
+        gs = fig.add_gridspec(4, 1)
+        
+        # Top subplot (3/4 height)
+        ax_main = fig.add_subplot(gs[0:3, :])
+        
+        # Bottom subplot (1/4 height), sharing X axis
+        ax_bottom = fig.add_subplot(gs[3, :], sharex=ax_main)
+        
         plt.subplots_adjust(left=0.3) # Make room for sidebar
         
         # Sidebar for RadioButtons
@@ -260,7 +287,7 @@ def main():
         radio = RadioButtons(rax, top_countries)
         
         def update(label):
-            plot_gap_decomposition(ax, label, df)
+            plot_gap_decomposition(ax_main, ax_bottom, label, df)
             fig.canvas.draw_idle()
 
         radio.on_clicked(update)
