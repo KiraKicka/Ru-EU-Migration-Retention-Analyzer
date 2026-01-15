@@ -2,8 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import ipywidgets as widgets
-from IPython.display import display
+from matplotlib.widgets import RadioButtons
 import os
 
 # ==========================================
@@ -11,6 +10,9 @@ import os
 # ==========================================
 sns.set_theme(style="whitegrid")
 plt.rcParams['figure.figsize'] = (12, 6)
+
+# Fix FutureWarning for downcasting
+pd.set_option('future.no_silent_downcasting', True)
 
 FILES = {
     'stock': 'migr_resvalid.xlsx',
@@ -110,64 +112,120 @@ def process_data():
     df['Stock'] = df.groupby('Country')['Stock'].transform(lambda x: x.interpolate(method='linear', limit=1))
 
     # Apply Gap Decomposition Logic
-    df = df.groupby('Country', group_keys=False).apply(calculate_theoretical_extended)
+    # Explicitly select columns to avoid DeprecationWarning in pandas 2.1+ and TypeError in <2.2
+    cols = ['Year', 'Stock', 'Inflow', 'Naturalization']
+    df = df.groupby('Country', group_keys=True)[cols].apply(calculate_theoretical_extended)
+    df = df.reset_index(level='Country')
     
     return df
 
 # ==========================================
+# STEP 2.5: REPORTING LOGIC
+# ==========================================
+def calculate_retention_ranking(df):
+    """
+    Calculates the Aggregate Retention Rate (CR) for each country.
+    CR = (Delta_Stock + Sum_Naturalization) / Sum_Inflow
+    """
+    results = []
+    for country, group in df.groupby('Country'):
+        # Filter for valid range (start to end)
+        group = group.sort_values('Year')
+        valid_stock = group['Stock'].dropna()
+        
+        if valid_stock.empty:
+            continue
+            
+        start_val = valid_stock.iloc[0]
+        end_val = valid_stock.iloc[-1]
+        
+        # Sum flows over the period where stock exists
+        start_year = group.loc[valid_stock.index[0], 'Year']
+        end_year = group.loc[valid_stock.index[-1], 'Year']
+        
+        period_mask = (group['Year'] > start_year) & (group['Year'] <= end_year)
+        sum_inflow = group.loc[period_mask, 'Inflow'].sum()
+        sum_nat = group.loc[period_mask, 'Naturalization'].sum()
+        
+        if sum_inflow < 1000: # Filter noise
+            continue
+            
+        delta_stock = end_val - start_val
+        
+        # Retention Rate Formula
+        cr = ((delta_stock + sum_nat) / sum_inflow) * 100
+        
+        # Implied Emigration (Total Attrition)
+        # E_implied = Sum_Inflow - (Delta_Stock + Sum_Nat)
+        e_implied = sum_inflow - (delta_stock + sum_nat)
+        
+        status = "Anchor" if cr >= 80 else "Transit"
+        
+        results.append({
+            'Country': country,
+            'Retention_Rate': cr,
+            'Implied_Emigration': e_implied,
+            'Status': status
+        })
+        
+    return pd.DataFrame(results).sort_values('Retention_Rate', ascending=False)
+
+# ==========================================
 # STEP 3: VISUALIZATION
 # ==========================================
-def plot_gap_decomposition(country, df):
+def plot_gap_decomposition(ax, country, df):
     """
     Renders the Gap Decomposition chart for a specific country.
     """
     data = df[df['Country'] == country].sort_values('Year')
     
     if data.empty or data['Stock'].isna().all():
-        print(f"Insufficient data for {country}")
+        ax.text(0.5, 0.5, f"Insufficient data for {country}", 
+                ha='center', va='center', transform=ax.transAxes)
         return
 
-    plt.figure(figsize=(12, 7))
+    ax.clear()
     
     years = data['Year']
     
     # Layer 1: Theoretical Max (Grey Line)
-    plt.plot(years, data['Theoretical_Max'], color='grey', linewidth=1.5, label='Theoretical Max (Zero Exit)')
+    ax.plot(years, data['Theoretical_Max'], color='grey', linewidth=1.5, label='Theoretical Max (Zero Exit)')
     
     # Layer 2: Theoretical Adj (Gold Dashed)
-    plt.plot(years, data['Theoretical_Adj'], color='gold', linestyle='--', linewidth=2, label='Theoretical (Citizenship Adj.)')
+    ax.plot(years, data['Theoretical_Adj'], color='gold', linestyle='--', linewidth=2, label='Theoretical (Citizenship Adj.)')
     
     # Layer 3: Actual Stock (Blue Solid)
-    plt.plot(years, data['Stock'], color='#003366', linewidth=2.5, label='Actual Resident Stock')
+    ax.plot(years, data['Stock'], color='#003366', linewidth=2.5, label='Actual Resident Stock')
     
     # Area 1: Naturalized (Integration) - Gold Fill
-    plt.fill_between(years, data['Theoretical_Max'], data['Theoretical_Adj'],
+    ax.fill_between(years, data['Theoretical_Max'], data['Theoretical_Adj'],
                      color='gold', alpha=0.2, label='Naturalized (Integration)')
     
     # Area 2: Emigration (Loss) - Red Fill (Where Adj > Stock)
-    plt.fill_between(years, data['Theoretical_Adj'], data['Stock'],
+    ax.fill_between(years, data['Theoretical_Adj'], data['Stock'],
                      where=(data['Theoretical_Adj'] > data['Stock']),
                      color='tab:red', alpha=0.3, label='Emigration (Loss)')
     
     # Area 3: Net Gain/Refugee (Green Fill) - (Where Stock > Adj)
-    plt.fill_between(years, data['Stock'], data['Theoretical_Adj'],
+    ax.fill_between(years, data['Stock'], data['Theoretical_Adj'],
                      where=(data['Stock'] > data['Theoretical_Adj']),
                      color='tab:green', alpha=0.3, label='Net Gain/Refugee Effect')
     
     # Annotations (Geopolitical Events)
     for year in [2014, 2022]:
         if year in years.values:
-            plt.axvline(x=year, color='black', linestyle=':', alpha=0.6)
-            plt.text(year, plt.ylim()[1]*0.95, f' {year}', rotation=90, va='top')
+            ax.axvline(x=year, color='black', linestyle=':', alpha=0.6)
+            # Use current ylim for text placement
+            y_max = ax.get_ylim()[1]
+            ax.text(year, y_max*0.95, f' {year}', rotation=90, va='top')
             
-    plt.title(f'Migration Gap Decomposition: {country}', fontsize=16, fontweight='bold')
-    plt.ylabel('Population Stock', fontsize=12)
-    plt.xlabel('Year', fontsize=12)
-    plt.legend(loc='upper left', frameon=True)
-    plt.grid(True, linestyle=':', alpha=0.6)
-    
-    plt.tight_layout()
-    plt.show()
+    ax.set_title(f'Migration Gap Decomposition: {country}', fontsize=16, fontweight='bold')
+    ax.set_ylabel('Population Stock', fontsize=12)
+    ax.yaxis.set_label_position("right")
+    ax.yaxis.tick_right()
+    ax.set_xlabel('Year', fontsize=12)
+    ax.legend(loc='upper left', frameon=True)
+    ax.grid(True, linestyle=':', alpha=0.6)
 
 def main():
     try:
@@ -180,23 +238,39 @@ def main():
             print("No valid data found.")
             return
 
-        print("\nStarting Interactive Dashboard...")
-        print("Select a country from the dropdown below.")
+        # Limit to top 15 for UI clarity
+        top_countries = valid_countries[:15]
+
+        # Print Demographic Report
+        print("\n=== DEMOGRAPHIC REPORT (Retention Ranking) ===")
+        df_ranking = calculate_retention_ranking(df)
+        for _, row in df_ranking.iterrows():
+            if row['Country'] in top_countries:
+                print(f"Country: {row['Country']:<15} | Retention Rate: {row['Retention_Rate']:>6.1f}% | "
+                      f"Implied Emigration: {row['Implied_Emigration']:>8.0f} | Status: {row['Status']}")
+        print("==============================================\n")
+
+        print("\nStarting Dashboard...")
+        print(f"Loaded {len(top_countries)} countries. Check the popup window.")
         
-        # Create Interactive Widget
-        dropdown = widgets.Dropdown(
-            options=valid_countries,
-            value=valid_countries[0] if valid_countries else None,
-            description='Country:',
-            disabled=False,
-        )
+        # Create Figure and Axes
+        fig, ax = plt.subplots()
+        plt.subplots_adjust(left=0.3) # Make room for sidebar
         
-        # Use interactive_output to link the dropdown to the plot function
-        # We pass 'df' as a fixed argument
-        ui = widgets.VBox([dropdown])
-        out = widgets.interactive_output(plot_gap_decomposition, {'country': dropdown, 'df': widgets.fixed(df)})
+        # Sidebar for RadioButtons
+        rax = plt.axes([0.02, 0.2, 0.25, 0.6], facecolor='#f0f0f0')
+        radio = RadioButtons(rax, top_countries)
         
-        display(ui, out)
+        def update(label):
+            plot_gap_decomposition(ax, label, df)
+            fig.canvas.draw_idle()
+
+        radio.on_clicked(update)
+
+        # Initial plot
+        update(top_countries[0])
+
+        plt.show()
 
     except Exception as e:
         print(f"An error occurred: {e}")
