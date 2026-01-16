@@ -8,71 +8,71 @@
     <img src="https://img.shields.io/badge/Matplotlib-3.x-orange.svg" alt="Matplotlib">
 </p>
 
-Этот проект представляет собой инструмент для демографического анализа миграционных процессов между Россией и странами Европейского Союза. Вместо простого подсчета прибывших, он фокусируется на **Коэффициенте Удержания (Retention Rate)** — ключевом показателе, который демонстрирует, какой процент иммигрантов остается в стране назначения на долгосрочной основе.
+This project is a tool for demographic analysis of migration processes between Russia and the European Union countries. Instead of simply counting arrivals, it focuses on the **Retention Rate** — a key indicator that shows what percentage of immigrants remain in the destination country on a long-term basis.
 
-Анализ охватывает ключевые страны притяжения для российских граждан: **Германию, Испанию, Францию и Италию** за период с 2008 года.
+The analysis covers the key countries of attraction for Russian citizens: **Germany, Spain, France, and Italy** for the period since 2008.
 
-## 📊 Методология: DBNA (Demographic Balancing with Naturalization Adjustment)
+## 📊 Methodology: DBNA (Demographic Balancing with Naturalization Adjustment)
 
-Стандартные методы анализа "приток минус отток" не работают для миграционной статистики ЕС из-за двух проблем:
-1.  **Ненадежность данных по эмиграции (`migr_emi`)**: Многие страны, включая Францию, практически не ведут учет уехавших иностранцев.
-2.  **Искажение из-за натурализации (`migr_acq`)**: Когда иммигрант получает гражданство, он исчезает из статистики "иностранного населения", что ошибочно может быть принято за эмиграцию.
+Standard "inflow minus outflow" analysis methods do not work for EU migration statistics due to two problems:
+1.  **Unreliable emigration data (`migr_emi`)**: Many countries, including France, hardly keep any records of foreigners who have left.
+2.  **Distortion due to naturalization (`migr_acq`)**: When an immigrant obtains citizenship, they disappear from the "foreign population" statistics, which can be mistakenly interpreted as emigration.
 
-Для решения этих проблем применяется **Метод Демографического Баланса с Коррекцией на Натурализацию (DBNA)**. Мы реконструируем "скрытую" эмиграцию, исходя из годового баланса.
+To solve these problems, the **Demographic Balancing with Naturalization Adjustment (DBNA) Method** is used. We reconstruct the "hidden" emigration based on the annual balance.
 
-**Итоговая формула Коэффициента Удержания (CR):**
+**The final formula for the Retention Rate (CR):**
 
 $$CR = \left( 1 - \frac{\max(0, E_{implied})}{P_t + I_{(t)}} \right) \times 100\%$$
 
-Где:
--   $P_t$: Численность резидентов на начало года (`migr_resvalid`).
--   $I_{(t)}$: Приток новых иммигрантов за год (`migr_resfirst`).
--   $E_{implied}$: "Подразумеваемая эмиграция", рассчитанная как разница между ожидаемой и фактической численностью населения с учетом натурализации.
+Where:
+-   $P_t$: Number of residents at the beginning of the year (`migr_resvalid`).
+-   $I_{(t)}$: Inflow of new immigrants during the year (`migr_resfirst`).
+-   $E_{implied}$: "Implied emigration," calculated as the difference between the expected and actual population figures, adjusted for naturalization.
 
-Этот подход позволяет оценить реальную стабильность миграционного контингента, рассматривая получение гражданства не как потерю, а как высшую форму удержания.
+This approach allows for an assessment of the real stability of the migrant contingent, considering the acquisition of citizenship not as a loss, but as the highest form of retention.
 
-## 🖼️ Демонстрация
+## 🖼️ Demonstration
 
-Скрипт запускает интерактивную панель `Matplotlib`, где можно визуально оценить разрыв между теоретическим и фактическим населением для каждой страны.
+The script launches an interactive `Matplotlib` panel where you can visually assess the gap between the theoretical and actual population for each country.
 
--   **Левая панель**: Позволяет выбрать страну для анализа.
--   **Верхний график (Декомпозиция разрыва)**:
-    -   `Actual Resident Stock`: Реальное число россиян с ВНЖ.
-    -   `Theoretical (Citizenship Adj.)`: Ожидаемое число резидентов, если бы никто не уезжал (с поправкой на натурализацию).
-    -   **Золотая область**: "Интеграция" — резиденты, ставшие гражданами.
-    -   **Красная область**: "Потери" — предполагаемая эмиграция.
--   **Нижний график**: Динамика годового притока (выданные первые ВНЖ).
+-   **Left panel**: Allows you to select a country for analysis.
+-   **Top chart (Gap Decomposition)**:
+    -   `Actual Resident Stock`: The real number of Russians with residence permits.
+    -   `Theoretical (Citizenship Adj.)`: The expected number of residents if no one had left (adjusted for naturalization).
+    -   **Gold area**: "Integration" — residents who have become citizens.
+    -   **Red area**: "Losses" — presumed emigration.
+-   **Bottom chart**: Dynamics of the annual inflow (issued first residence permits).
 
-## 🛠️ Установка и требования
+## 🛠️ Installation and requirements
 
-1.  **Клонируйте репозиторий:**
+1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/ваш-репозиторий/migration-analyzer.git
+    git clone https://github.com/your-repository/migration-analyzer.git
     cd migration-analyzer
     ```
 
-2.  **Установите зависимости:**
-    Скрипт требует Python 3.8+ и следующие библиотеки. Установите их с помощью `pip`:
+2.  **Install dependencies:**
+    The script requires Python 3.8+ and the following libraries. Install them using `pip`:
     ```bash
     pip install pandas numpy matplotlib seaborn openpyxl
     ```
 
-3.  **Подготовьте данные:**
-    Скачайте необходимые наборы данных из базы Eurostat и поместите их в корневую директорию проекта под следующими именами:
-    -   `migr_resvalid.xlsx`: Численность действующих ВНЖ (Stock).
-    -   `migr_resfirst.xlsx`: Выданные первые ВНЖ (Inflow).
-    -   `migr_acq.xlsx`: Получение гражданства (Naturalization).
+3.  **Prepare the data:**
+    Download the necessary datasets from the Eurostat database and place them in the root directory of the project under the following names:
+    -   `migr_resvalid.xlsx`: Number of valid residence permits (Stock).
+    -   `migr_resfirst.xlsx`: Issued first residence permits (Inflow).
+    -   `migr_acq.xlsx`: Acquisition of citizenship (Naturalization).
 
-## 🚀 Использование
+## 🚀 Usage
 
-Для запуска анализа выполните скрипт из командной строки:
+To run the analysis, execute the script from the command line:
 
 ```bash
 python migration_analysis.py
 ```
 
-Процесс выполнения:
-1.  **Консольный отчет**: В терминал будет выведен рейтинг стран по **Коэффициенту Удержания**.
+Execution process:
+1.  **Console report**: A ranking of countries by **Retention Rate** will be printed to the terminal.
     ```
     === DEMOGRAPHIC REPORT (Retention Ranking) ===
     Country: France          | Retention Rate:  99.8% | Implied Emigration:       98 | Status: Anchor
@@ -81,8 +81,8 @@ python migration_analysis.py
     Country: Spain           | Retention Rate:  97.4% | Implied Emigration:     2648 | Status: Anchor
     ==============================================
     ```
-2.  **Интерактивная панель**: Автоматически откроется окно `Matplotlib` с визуализацией, где вы сможете переключаться между странами.
+2.  **Interactive panel**: A `Matplotlib` window with visualizations will automatically open, where you can switch between countries.
 
-## 📄 Лицензия
+## 📄 License
 
-Этот проект распространяется под лицензией MIT.
+This project is distributed under the MIT License.
