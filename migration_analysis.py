@@ -127,8 +127,14 @@ def process_data():
     # Filter Timeframe (Year >= 2008)
     df = df[df['Year'] >= 2008]
     
-    # Interpolate small gaps and fill NaNs for calculation
-    for col in ['Stock', 'Pending', 'LongTerm']:
+    # Interpolate small gaps
+    # Stock: Do NOT fillna(0) to allow dynamic start year (e.g. if 2008 is missing)
+    df['Stock'] = df.groupby('Country')['Stock'].transform(
+        lambda x: x.interpolate(method='linear', limit=1)
+    )
+
+    # Others: Fill NaNs with 0 as they are likely zero if missing
+    for col in ['Pending', 'LongTerm']:
         df[col] = df.groupby('Country')[col].transform(
             lambda x: x.interpolate(method='linear', limit=1).fillna(0)
         )
@@ -309,15 +315,8 @@ def main():
         # Limit to top 15 for UI clarity
         top_countries = valid_countries[:15]
 
-        # Print Demographic Report
-        print("\n=== DEMOGRAPHIC REPORT (Retention Ranking) ===")
+        # Calculate ranking data for GUI
         df_ranking = calculate_retention_ranking(df)
-        print(f"{'Country':<15} | {'Std CR':>8} | {'Forensic CR':>11} | {'Anchoring':>9}")
-        print("-" * 55)
-        for _, row in df_ranking.iterrows():
-            if row['Country'] in top_countries:
-                print(f"{row['Country']:<15} | {row['Retention_Rate']:>7.1f}% | {row['Forensic_Rate']:>10.1f}% | {row['Anchoring_Ratio']:>8.1f}%")
-        print("==============================================\n")
 
         print("\nStarting Dashboard...")
         print(f"Loaded {len(top_countries)} countries. Check the popup window.")
@@ -338,8 +337,30 @@ def main():
         rax = plt.axes([0.02, 0.2, 0.25, 0.6], facecolor='#f0f0f0')
         radio = RadioButtons(rax, top_countries)
         
+        # Stats Panel (New)
+        stats_ax = plt.axes([0.02, 0.05, 0.25, 0.15], facecolor='#f0f0f0')
+        stats_ax.axis('off')
+        
         def update(label):
             plot_gap_decomposition(ax_main, ax_bottom, label, df)
+            
+            # Update Stats Panel
+            stats_ax.clear()
+            stats_ax.axis('off')
+            
+            country_stats = df_ranking[df_ranking['Country'] == label]
+            if not country_stats.empty:
+                row = country_stats.iloc[0]
+                text_str = (f"Metrics for {label}:\n\n"
+                            f"Std CR:      {row['Retention_Rate']:.1f}%\n"
+                            f"Forensic CR: {row['Forensic_Rate']:.1f}%\n"
+                            f"Anchoring:   {row['Anchoring_Ratio']:.1f}%")
+            else:
+                text_str = f"Metrics for {label}:\nN/A"
+                
+            stats_ax.text(0.05, 0.9, text_str, transform=stats_ax.transAxes, 
+                          fontsize=10, verticalalignment='top', fontfamily='monospace')
+            
             fig.canvas.draw_idle()
 
         radio.on_clicked(update)
