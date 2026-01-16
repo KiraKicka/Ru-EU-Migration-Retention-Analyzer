@@ -280,11 +280,15 @@ def plot_gap_decomposition(ax_main, ax_bottom, country, df):
     # Layer 4: Inflow (Teal)
     ax_bottom.plot(years, data['Inflow'], color='teal', linestyle='-', linewidth=2, label='Inflow (First Permits)')
     
-    # Explicitly scale Y-axis to fit data (start at 0)
-    if not data['Inflow'].dropna().empty:
-        ax_bottom.set_ylim(bottom=0, top=data['Inflow'].max() * 1.1)
+    # Layer 5: Naturalization (Gold)
+    ax_bottom.plot(years, data['Naturalization'], color='gold', linestyle='-', linewidth=2, label='Naturalization (Passports)')
     
-    ax_bottom.set_ylabel('Inflow', fontsize=12)
+    # Explicitly scale Y-axis to fit data (start at 0)
+    max_val = data[['Inflow', 'Naturalization']].max().max()
+    if not pd.isna(max_val) and max_val > 0:
+        ax_bottom.set_ylim(bottom=0, top=max_val * 1.1)
+    
+    ax_bottom.set_ylabel('Annual Flows', fontsize=12)
     ax_bottom.yaxis.set_label_position("right")
     ax_bottom.yaxis.tick_right()
     ax_bottom.set_xlabel('Year', fontsize=12)
