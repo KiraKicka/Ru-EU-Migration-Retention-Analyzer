@@ -31,37 +31,54 @@ Where:
 
 This approach allows for an assessment of the real stability of the migrant contingent, considering the acquisition of citizenship not as a loss, but as the highest form of retention.
 
-## 🖼️ Demonstration
+## 💾 Data Acquisition & Setup
 
-The script launches an interactive `Matplotlib` panel where you can visually assess the gap between the theoretical and actual population for each country.
+This analysis relies exclusively on official data from the **Eurostat Database**, ensuring reliability and comparability across countries. The script requires three specific datasets to reconstruct the demographic balance.
 
--   **Left panel**: Allows you to select a country for analysis.
--   **Top chart (Gap Decomposition)**:
-    -   `Actual Resident Stock`: The real number of Russians with residence permits.
-    -   `Theoretical (Citizenship Adj.)`: The expected number of residents if no one had left (adjusted for naturalization).
-    -   **Gold area**: "Integration" — residents who have become citizens.
-    -   **Red area**: "Losses" — presumed emigration.
--   **Bottom chart**: Dynamics of the annual inflow (issued first residence permits).
-
-## 🛠️ Installation and requirements
-
-1.  **Clone the repository:**
+1.  **Clone the repository and install dependencies:**
     ```bash
     git clone https://github.com/your-repository/migration-analyzer.git
     cd migration-analyzer
-    ```
-
-2.  **Install dependencies:**
-    The script requires Python 3.8+ and the following libraries. Install them using `pip`:
-    ```bash
     pip install pandas numpy matplotlib seaborn openpyxl
     ```
 
-3.  **Prepare the data:**
-    Download the necessary datasets from the Eurostat database and place them in the root directory of the project under the following names:
-    -   `migr_resvalid.xlsx`: Number of valid residence permits (Stock).
-    -   `migr_resfirst.xlsx`: Issued first residence permits (Inflow).
-    -   `migr_acq.xlsx`: Acquisition of citizenship (Naturalization).
+2.  **Download the data from Eurostat:**
+    Navigate to the [Eurostat Database](https://ec.europa.eu/eurostat/web/main/data/database) and download the following tables. For each table, use the **"Data Explorer"** to apply the filters below, then download the data as a **"Spreadsheet"** (`.xlsx` file).
+
+    *   **Filters to apply for ALL tables:**
+        *   **Citizen (CITIZEN):** Russia (RU)
+        *   **Sex (SEX):** Total
+        *   **Age (AGE):** Total
+        *   **Unit (UNIT):** Person / Number
+        *   **Destination (GEO):** Select your countries of interest (e.g., Germany, France, Italy, Spain).
+
+    *   **Required Tables:**
+
+        | Eurostat Code | Purpose | Why it's needed | Filename to use |
+        | :--- | :--- | :--- | :--- |
+        | **`migr_resvalid`** | Stock of Residents | Provides the baseline number of Russian citizens with valid residence permits at the end of each year. This is our ground truth. | `migr_resvalid.xlsx` |
+        | **`migr_resfirst`** | Inflow of Immigrants| Tracks the number of newly issued first residence permits each year. This is the primary input driving population growth. | `migr_resfirst.xlsx` |
+        | **`migr_acq`** | Naturalization | Accounts for residents who acquire citizenship. They haven't emigrated but are removed from the `migr_resvalid` stock, so we must track them to avoid misinterpreting their exit as a "loss". | `migr_acq.xlsx` |
+
+3.  **Place the files:**
+    Move the three downloaded `.xlsx` files into the root directory of the project, ensuring their names match the "Filename to use" column above.
+
+## 📈 Understanding the Gap Analysis
+
+The core of this project is the **Gap Decomposition** chart, which visualizes the difference between a theoretical "perfect retention" scenario and the observed reality.
+
+Here is how to interpret each element of the chart:
+
+*   **THE "GAP"**: This is the overall space between the top grey line (the maximum possible population) and the bottom blue line (the actual population). The chart explains what this gap is made of.
+
+*   **Lines:**
+    *   <span style="color:grey">▬</span> **Grey Line (`Theoretical Max`):** Represents the theoretical maximum number of residents if **no one ever left** and **no one acquired citizenship**. It's calculated as `Initial Population + Cumulative Inflow`.
+    *   <span style="color:gold">▬</span> **Gold Dashed Line (`Theoretical Adj.`):** This is a more realistic theoretical line. It subtracts the cumulative number of naturalized citizens from the `Theoretical Max`. This line shows what the resident stock *should* be if the only "exit" was acquiring a passport.
+    *   <span style="color:#003366">▬</span> **Blue Line (`Actual Resident Stock`):** This is the ground truth—the actual number of Russian citizens with valid residence permits recorded by Eurostat.
+
+*   **Shaded Areas:**
+    *   <span style="color:gold;opacity:0.5">■</span> **Gold Area (`Naturalized / Integration`):** The gap between the grey and gold lines. This area represents the portion of the original cohort that has **successfully integrated** by becoming citizens of the host country. From a retention perspective, this is a positive outcome, not a loss.
+    *   <span style="color:red;opacity:0.5">■</span> **Red Area (`Emigration / Loss`):** The gap between the gold dashed line and the solid blue line. This area represents the "unexplained" difference—people who are not in the official stock and have not become citizens. This is the **Implied Emigration**, or the population that has likely moved elsewhere.
 
 ## 🚀 Usage
 
