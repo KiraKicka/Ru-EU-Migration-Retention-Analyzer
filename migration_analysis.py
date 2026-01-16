@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.widgets import RadioButtons
 import os
+from functools import reduce
 
 # ==========================================
 # CONFIGURATION & STYLE
@@ -17,7 +18,11 @@ pd.set_option('future.no_silent_downcasting', True)
 FILES = {
     'stock': 'migr_resvalid.xlsx',
     'inflow': 'migr_resfirst.xlsx',
-    'naturalization': 'migr_acq.xlsx'
+    'naturalization': 'migr_acq.xlsx',
+    'asylum_pending': 'migr_asypenctzm.xlsx',
+    'change_status': 'migr_reschange.xlsx',
+    'long_term': 'migr_reslong.xlsx',
+    'blue_card': 'migr_resbc13.xlsx'
 }
 
 # ==========================================
@@ -37,6 +42,16 @@ def load_and_process_file(filepath, value_name):
     # Rename first column to 'Country' for consistency
     df.rename(columns={df.columns[0]: 'Country'}, inplace=True)
     
+    # Handle Monthly Data (e.g., 2008M12) for Asylum Pending
+    # Check if columns contain 'M' (excluding the Country column)
+    data_cols = df.columns[1:]
+    if any('M' in str(c) for c in data_cols):
+        # Filter for December (M12) to get year-end stock
+        m12_cols = [c for c in data_cols if str(c).endswith('M12')]
+        df = df[['Country'] + m12_cols]
+        # Rename columns: "2008M12" -> "2008"
+        df.columns = ['Country'] + [str(c).replace('M12', '') for c in m12_cols]
+
     # Melt: Turn Year columns into rows
     year_cols = df.columns[1:]
     df_melted = df.melt(id_vars=['Country'], value_vars=year_cols, 
@@ -95,25 +110,36 @@ def process_data():
     Loads, merges, filters, and calculates metrics.
     """
     print("Loading data...")
-    df_s = load_and_process_file(FILES['stock'], 'Stock')
-    df_i = load_and_process_file(FILES['inflow'], 'Inflow')
-    df_n = load_and_process_file(FILES['naturalization'], 'Naturalization')
+    data_frames = [
+        load_and_process_file(FILES['stock'], 'Stock'),
+        load_and_process_file(FILES['inflow'], 'Inflow'),
+        load_and_process_file(FILES['naturalization'], 'Naturalization'),
+        load_and_process_file(FILES['asylum_pending'], 'Pending'),
+        load_and_process_file(FILES['change_status'], 'ChangeStatus'),
+        load_and_process_file(FILES['long_term'], 'LongTerm'),
+        load_and_process_file(FILES['blue_card'], 'BlueCard')
+    ]
     
-    # Merge
+    # Merge all datasets
     print("Merging and processing...")
-    df = df_s.merge(df_i, on=['Country', 'Year'], how='outer') \
-             .merge(df_n, on=['Country', 'Year'], how='outer')
+    df = reduce(lambda left, right: pd.merge(left, right, on=['Country', 'Year'], how='outer'), data_frames)
     
     # Filter Timeframe (Year >= 2008)
     df = df[df['Year'] >= 2008]
     
-    # Interpolate small gaps in Stock for better visualization
-    # (Group by country first to avoid cross-country interpolation)
-    df['Stock'] = df.groupby('Country')['Stock'].transform(lambda x: x.interpolate(method='linear', limit=1))
+    # Interpolate small gaps and fill NaNs for calculation
+    for col in ['Stock', 'Pending', 'LongTerm']:
+        df[col] = df.groupby('Country')[col].transform(
+            lambda x: x.interpolate(method='linear', limit=1).fillna(0)
+        )
+
+    # Calculate Total De Facto Stock (Official + Pending)
+    df['Total_De_Facto'] = df['Stock'] + df['Pending']
 
     # Apply Gap Decomposition Logic
-    # Explicitly select columns to avoid DeprecationWarning in pandas 2.1+ and TypeError in <2.2
-    cols = ['Year', 'Stock', 'Inflow', 'Naturalization']
+    # Explicitly select columns to preserve them after apply
+    cols = ['Year', 'Stock', 'Inflow', 'Naturalization', 'Pending', 
+            'Total_De_Facto', 'LongTerm', 'ChangeStatus', 'BlueCard']
     df = df.groupby('Country', group_keys=True)[cols].apply(calculate_theoretical_extended)
     df = df.reset_index(level='Country')
     
@@ -124,8 +150,10 @@ def process_data():
 # ==========================================
 def calculate_retention_ranking(df):
     """
-    Calculates the Aggregate Retention Rate (CR) for each country.
-    CR = (Delta_Stock + Sum_Naturalization) / Sum_Inflow
+    Calculates:
+    1. Standard Retention Rate (CR)
+    2. Forensic Retention Rate (De Facto CR)
+    3. Anchoring Ratio (Long-Term / Stock)
     """
     results = []
     for country, group in df.groupby('Country'):
@@ -152,11 +180,21 @@ def calculate_retention_ranking(df):
             
         delta_stock = end_val - start_val
         
-        # Retention Rate Formula
+        # 1. Standard Retention Rate
         cr = ((delta_stock + sum_nat) / sum_inflow) * 100
         
-        # Implied Emigration (Total Attrition)
-        # E_implied = Sum_Inflow - (Delta_Stock + Sum_Nat)
+        # 2. Forensic Retention Rate (Using Total De Facto Stock)
+        start_defacto = group.loc[valid_stock.index[0], 'Total_De_Facto']
+        end_defacto = group.loc[valid_stock.index[-1], 'Total_De_Facto']
+        delta_defacto = end_defacto - start_defacto
+        
+        cr_forensic = ((delta_defacto + sum_nat) / sum_inflow) * 100
+
+        # 3. Anchoring Ratio (Latest available)
+        last_long_term = group.loc[valid_stock.index[-1], 'LongTerm']
+        anchoring_ratio = (last_long_term / end_val) * 100 if end_val > 0 else 0
+
+        # Implied Emigration (Standard)
         e_implied = sum_inflow - (delta_stock + sum_nat)
         
         status = "Anchor" if cr >= 80 else "Transit"
@@ -164,8 +202,8 @@ def calculate_retention_ranking(df):
         results.append({
             'Country': country,
             'Retention_Rate': cr,
-            'Implied_Emigration': e_implied,
-            'Status': status
+            'Forensic_Rate': cr_forensic,
+            'Anchoring_Ratio': anchoring_ratio
         })
         
     return pd.DataFrame(results).sort_values('Retention_Rate', ascending=False)
@@ -199,17 +237,22 @@ def plot_gap_decomposition(ax_main, ax_bottom, country, df):
     # Layer 2: Theoretical Adj (Gold Dashed)
     ax_main.plot(years, data['Theoretical_Adj'], color='gold', linestyle='--', linewidth=2, label='Theoretical (Citizenship Adj.)')
     
-    # Layer 3: Actual Stock (Blue Solid)
-    ax_main.plot(years, data['Stock'], color='#003366', linewidth=2.5, label='Actual Resident Stock')
+    # Layer 3: Actual Stock (Blue Solid) - Base
+    ax_main.plot(years, data['Stock'], color='#003366', linewidth=2, label='Official Resident Stock')
+    
+    # Layer 4: Pending Asylum (Stacked on Stock)
+    ax_main.plot(years, data['Total_De_Facto'], color='purple', linewidth=1, linestyle=':', label='De Facto (Incl. Pending)')
+    ax_main.fill_between(years, data['Stock'], data['Total_De_Facto'], color='purple', alpha=0.3, label='Pending Asylum (Invisible)')
     
     # Area 1: Naturalized (Integration) - Gold Fill
     ax_main.fill_between(years, data['Theoretical_Max'], data['Theoretical_Adj'],
                      color='gold', alpha=0.2, label='Naturalized (Integration)')
     
-    # Area 2: Emigration (Loss) - Red Fill (Where Adj > Stock)
-    ax_main.fill_between(years, data['Theoretical_Adj'], data['Stock'],
-                     where=(data['Theoretical_Adj'] > data['Stock']),
-                     color='tab:red', alpha=0.3, label='Emigration (Loss)')
+    # Area 2: Emigration (Loss) - Red Fill
+    # Gap is now between Theoretical_Adj and Total_De_Facto (Forensic View)
+    ax_main.fill_between(years, data['Theoretical_Adj'], data['Total_De_Facto'],
+                     where=(data['Theoretical_Adj'] > data['Total_De_Facto']),
+                     color='tab:red', alpha=0.3, label='Implied Emigration')
     
     # Annotations (Geopolitical Events)
     for year in [2014, 2022]:
@@ -265,10 +308,11 @@ def main():
         # Print Demographic Report
         print("\n=== DEMOGRAPHIC REPORT (Retention Ranking) ===")
         df_ranking = calculate_retention_ranking(df)
+        print(f"{'Country':<15} | {'Std CR':>8} | {'Forensic CR':>11} | {'Anchoring':>9}")
+        print("-" * 55)
         for _, row in df_ranking.iterrows():
             if row['Country'] in top_countries:
-                print(f"Country: {row['Country']:<15} | Retention Rate: {row['Retention_Rate']:>6.1f}% | "
-                      f"Implied Emigration: {row['Implied_Emigration']:>8.0f} | Status: {row['Status']}")
+                print(f"{row['Country']:<15} | {row['Retention_Rate']:>7.1f}% | {row['Forensic_Rate']:>10.1f}% | {row['Anchoring_Ratio']:>8.1f}%")
         print("==============================================\n")
 
         print("\nStarting Dashboard...")
