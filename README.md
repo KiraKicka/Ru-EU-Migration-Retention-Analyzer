@@ -37,7 +37,7 @@ This analysis relies exclusively on official data from the **Eurostat Database**
 
 1.  **Clone the repository and install dependencies:**
     ```bash
-    git clone https://github.com/your-repository/migration-analyzer.git
+    git clone https://github.com/KiraKicka/Ru-EU-Migration-Retention-Analyzer
     cd migration-analyzer
     pip install pandas numpy matplotlib seaborn openpyxl
     ```
