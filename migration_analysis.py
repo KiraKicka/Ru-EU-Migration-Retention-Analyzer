@@ -25,15 +25,6 @@ FILES = {
     'blue_card': 'migr_resbc13.xlsx'
 }
 
-# Forensic Coefficients for Data Correction
-FORENSIC_CONFIG = {
-    'France': {'inflow_modifier': 1.25, 'stock_modifier': 1.0},
-    'Spain': {'inflow_modifier': 1.0, 'stock_modifier': 0.95},
-    'Italy': {'inflow_modifier': 1.0, 'stock_modifier': 0.95},
-    'Germany': {'inflow_modifier': 1.0, 'stock_modifier': 1.0}
-}
-DEFAULT_CONFIG = {'inflow_modifier': 1.0, 'stock_modifier': 1.0}
-
 # ==========================================
 # STEP 1: DATA LOADING & CLEANING
 # ==========================================
@@ -151,21 +142,6 @@ def process_data():
     # Calculate Total De Facto Stock (Official + Pending)
     df['Total_De_Facto'] = df['Stock'] + df['Pending']
 
-    # --- APPLY FORENSIC MODIFIERS ---
-    # Adjusts Inflow and Stock based on country-specific administrative errors
-    for country in df['Country'].unique():
-        config = FORENSIC_CONFIG.get(country, DEFAULT_CONFIG)
-        mask = df['Country'] == country
-        
-        # Apply Inflow Modifier (Corrects for invisible minors, etc.)
-        if config['inflow_modifier'] != 1.0:
-            df.loc[mask, 'Inflow'] *= config['inflow_modifier']
-            
-        # Apply Stock Modifier (Corrects for "Zombie" residents)
-        if config['stock_modifier'] != 1.0:
-            df.loc[mask, 'Stock'] *= config['stock_modifier']
-            df.loc[mask, 'Total_De_Facto'] *= config['stock_modifier']
-
     # Apply Gap Decomposition Logic
     # Explicitly select columns to preserve them after apply
     cols = ['Year', 'Stock', 'Inflow', 'Naturalization', 'Pending', 
@@ -184,7 +160,6 @@ def calculate_retention_ranking(df):
     1. Standard Retention Rate (CR)
     2. Forensic Retention Rate (De Facto CR)
     3. Anchoring Ratio (Long-Term / Stock)
-    4. PCAR (Pre-Citizenship Attrition Rate)
     """
     results = []
     for country, group in df.groupby('Country'):
@@ -225,21 +200,16 @@ def calculate_retention_ranking(df):
         last_long_term = group.loc[valid_stock.index[-1], 'LongTerm']
         anchoring_ratio = (last_long_term / end_val) * 100 if end_val > 0 else 0
 
-        # 4. PCAR (Pre-Citizenship Attrition Rate)
-        # Inputs = Start_Stock + Sum(Adjusted_Inflow)
-        # Outputs = End_Stock_Adjusted + Sum(Naturalizations)
-        inputs = start_val + sum_inflow
-        outputs = end_val + sum_nat
+        # Implied Emigration (Standard)
+        e_implied = sum_inflow - (delta_stock + sum_nat)
         
-        pcar = ((inputs - outputs) / inputs) * 100
-        pcar = max(0, pcar) # Clamp to 0
+        status = "Anchor" if cr >= 80 else "Transit"
         
         results.append({
             'Country': country,
             'Retention_Rate': cr,
             'Forensic_Rate': cr_forensic,
-            'Anchoring_Ratio': anchoring_ratio,
-            'PCAR': pcar
+            'Anchoring_Ratio': anchoring_ratio
         })
         
     return pd.DataFrame(results).sort_values('PCAR', ascending=True) # Sort by lowest attrition
@@ -347,14 +317,6 @@ def main():
 
         # Calculate ranking data for GUI
         df_ranking = calculate_retention_ranking(df)
-        
-        # Print Console Report
-        print("\n=== DEMOGRAPHIC REPORT (Forensic Attrition) ===")
-        print(f"{'Country':<15} | {'PCAR (Attrition)':<18} | {'Anchoring Ratio':<15}")
-        print("-" * 55)
-        for _, row in df_ranking.iterrows():
-            print(f"{row['Country']:<15} | {row['PCAR']:>16.1f}% | {row['Anchoring_Ratio']:>13.1f}%")
-        print("=" * 55)
 
         print("\nStarting Dashboard...")
         print(f"Loaded {len(top_countries)} countries. Check the popup window.")
@@ -390,8 +352,9 @@ def main():
             if not country_stats.empty:
                 row = country_stats.iloc[0]
                 text_str = (f"Metrics for {label}:\n\n"
-                            f"Forensic Attrition (PCAR): {row['PCAR']:.1f}%\n"
-                            f"Anchoring Ratio:           {row['Anchoring_Ratio']:.1f}%")
+                            f"Std CR:      {row['Retention_Rate']:.1f}%\n"
+                            f"Forensic CR: {row['Forensic_Rate']:.1f}%\n"
+                            f"Anchoring:   {row['Anchoring_Ratio']:.1f}%")
             else:
                 text_str = f"Metrics for {label}:\nN/A"
                 
